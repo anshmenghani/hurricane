@@ -37,3 +37,38 @@ print(pred_np)
 
 # Optional: save to CSV
 pd.DataFrame(pred_np, columns=["pred_lat", "pred_lon"]).to_csv("predictions.csv", index=False)
+
+k = 5
+kf = KFold(n_splits=k, shuffle=True, random_state=42)
+fold = 1
+mse_list = []
+
+for train_idx, val_idx in kf.split(x_tensor):
+    print(f"\n=== Fold {fold} ===")
+    
+    x_train, x_val = x_tensor[train_idx], x_tensor[val_idx]
+    y_train, y_val = y_tensor[train_idx], y_tensor[val_idx]
+    
+    input_dim = x_train.shape[1]
+    model = SimpleRegressor(input_dim=input_dim)
+    
+    criterion = nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    
+    model.train()
+    for epoch in range(100):
+        optimizer.zero_grad()
+        preds = model(x_train)
+        loss = criterion(preds, y_train)
+        loss.backward()
+        optimizer.step()
+    
+    model.eval()
+    with torch.no_grad():
+        val_preds = model(x_val)
+        mse = mean_squared_error(y_val.numpy(), val_preds.numpy())
+        print(f"Fold {fold} MSE: {mse:.4f}")
+        mse_list.append(mse)
+        fold += 1
+
+print(f"\nAverage MSE across {k} folds: {np.mean(mse_list):.4f}")
