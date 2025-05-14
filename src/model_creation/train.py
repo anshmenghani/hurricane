@@ -1,36 +1,63 @@
-from tensorflow.keras.layers import Input, Dense, LayerNormalization, GaussianDropout, PReLU
-from tensorflow.keras.models import Model
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.losses import MeanSquaredLogarithmicError as MSLE
-from sklearn.model_selection import train_test_split
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader, TensorDataset
 import pandas as pd
 
-def HurricanePathModel(shape):
-    input_layer = Input(shape=shape)
-    norm_input = LayerNormalization(beta_regularizer="L1L2", gamma_regularizer="L1L2")(input_layer)
+# === 1. Define a simple regression model ===
+class SimpleRegressor(nn.Module):
+    def __init__(self, input_dim):
+        super(SimpleRegressor, self).__init__()
+        self.model = nn.Sequential(
+            nn.Linear(input_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Linear(32, 2)  # Output shape: [batch_size, 2]
+        )
 
-    hidden1 = Dense(32, kernel_regularizer="L1L2", bias_regularizer="L1L2", activity_regularizer="L1L2")(norm_input)
-    hidden1 = PReLU()(hidden1)
-    hidden1 = LayerNormalization(beta_regularizer="L1L2", gamma_regularizer="L1L2")(hidden1)
-    hidden1 = GaussianDropout(0.6)(hidden1)
+    def forward(self, x):
+        return self.model(x)
 
-    hidden2 = Dense(64, kernel_regularizer="L1L2", bias_regularizer="L1L2", activity_regularizer="L1L2")(hidden1)
-    hidden2 = PReLU()(hidden2)
-    hidden2 = LayerNormalization(beta_regularizer="L1L2", gamma_regularizer="L1L2")(hidden2)
-    hidden2 = GaussianDropout(0.4)(hidden2)
+# === 2. Load input and output data ===
+x_df = pd.read_csv("x_train.csv")
+y_df = pd.read_csv("y_train.csv")
 
-    hidden3 = Dense(32, kernel_regularizer="L1L2", bias_regularizer="L1L2", activity_regularizer="L1L2")(hidden2)
-    hidden3 = PReLU()(hidden3)
-    hidden3 = LayerNormalization(beta_regularizer="L1L2", gamma_regularizer="L1L2")(hidden3)
+# Drop NaNs from x and match y by index
+x_df_clean = x_df.dropna()
+y_df_clean = y_df.loc[x_df_clean.index]
 
-    output = Dense(1)(hidden3)
-
-    closing_price_model = Model(inputs=input_layer, outputs=output)
-    return closing_price_model
+# Convert to NumPy
+x_train = x_df_clean.values.astype("float32")
+y_train = y_df_clean.values.astype("float32")
 
 
-x_train, x_test, y_train, y_test = loadData(path)
-hpm = HurricanePathModel((100, 3,)) # change shape later 
-hpm.compile(optimizer=Adam(learning_rate=0.001), loss=MSLE(), metrics=["accuracy"], run_eagerly=False, jit_compile=False, steps_per_execution=1)
-hpm.fit(x=x_train, y=y_train, validation_split=0.20, epochs=100, batch_size=32, shuffle=False, validation_batch_size=16, validation_freq=2) # Make sure shuffle=False so that hurricanes dont get ungrouped
-hpm.save("src/model/hpm.keras")
+
+x_tensor = torch.tensor(x_train)
+y_tensor = torch.tensor(y_train)
+
+# === 3. Prepare dataset and loader ===
+dataset = TensorDataset(x_tensor, y_tensor)
+loader = DataLoader(dataset, batch_size=32, shuffle=True)
+
+# === 4. Initialize model, loss, optimizer ===
+model = SimpleRegressor(input_dim=x_tensor.shape[1])
+loss_fn = nn.MSELoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
+
+# === 5. Train loop ===
+for epoch in range(100):
+    model.train()
+    epoch_loss = 0.0
+
+    for xb, yb in loader:
+        optimizer.zero_grad()
+        preds = model(xb)  # preds shape: [batch_size, 2]
+        loss = loss_fn(preds, yb)  # yb shape: [batch_size, 2]
+        loss.backward()
+        optimizer.step()
+        epoch_loss += loss.item()
+
+    print(f"Epoch {epoch+1}: Loss = {epoch_loss / len(loader):.4f}")
+
+# === 6. Save model ===
+torch.save(model.state_dict(), "simple_model.pth")
