@@ -1,6 +1,11 @@
 import torch
 import torch.nn as nn
 import pandas as pd
+import torch
+import numpy as np
+from sklearn.model_selection import KFold
+from sklearn.metrics import mean_squared_error
+
 
 # === 1. Define the model (must match training definition) ===
 class SimpleRegressor(nn.Module):
