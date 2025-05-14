@@ -72,3 +72,18 @@ for train_idx, val_idx in kf.split(x_tensor):
         fold += 1
 
 print(f"\nAverage MSE across {k} folds: {np.mean(mse_list):.4f}")
+
+import matplotlib.pyplot as plt
+
+# After your k-fold loop
+folds = list(range(1, k + 1))
+
+plt.figure(figsize=(8, 5))
+plt.plot(folds, mse_list, marker='o', linestyle='-')
+plt.title("K-Fold Mean Squared Error")
+plt.xlabel("Fold")
+plt.ylabel("MSE")
+plt.grid(True)
+plt.xticks(folds)
+plt.show()
+
